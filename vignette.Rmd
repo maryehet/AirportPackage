@@ -1,0 +1,292 @@
+---
+title: "vignette"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(AirportPackage)
+library("maps")
+library("mapview")
+library("fields")
+library("sp")
+data("airport_data")
+data("sym_direct_from")
+data("points_near_points75")
+data("points_near_points100")
+data("points_near_airport75")
+data("points_near_airport100")
+data("closest_airport75")
+data("closest_airport100")
+data("direct_from_a")
+data("direct_from_b")
+data("direct_from_c")
+
+numflight <- vector()
+origin_names <- airport_data$Origin
+for(origin in origin_names){
+  count <- length(sym_direct_from[[origin]])
+  numflight <- c(numflight, count)
+} #this allows us to color code the airports based on the number of 
+#direct flights
+
+conname <- vector()
+for(origin in origin_names){
+  listcity <- toString(sym_direct_from[[origin]])
+  conname <- c(conname, listcity)
+} # in the interactive version of our map you will be able to click on a specific
+# airport and see the connecting airports- not visiisble in pdf version
+
+
+airport_map <- airport_data
+airport_map['Directflights'] <- numflight
+airport_map['Namesflight'] <- conname
+airmap <- mapview(airport_map, xcol = "Longitude", ycol = "Latitude", zcol = "Directflights",
+                  crs = 4269, grid = FALSE)
+airmap
+```
+
+```{r}
+#2
+usa_poly <- map("usa")
+usa_poly$x <- c(NA,usa_poly$x,NA)
+usa_poly$y <- c(NA,usa_poly$y,NA)
+nai <- which( is.na( usa_poly$x ) )
+
+# define a grid of longitude and latitude points
+n1 <- 180
+n2 <- 90
+lo <- seq(usa_poly$range[1], usa_poly$range[2], length.out = n1)
+la <- seq(usa_poly$range[3], usa_poly$range[4], length.out = n2)
+lonlat_grid <- as.matrix( expand.grid( lo, la ) )
+
+# figure out which points are inside USA
+in_usa <- rep(FALSE, nrow(lonlat_grid))
+for(j in 1:(length(nai)-1)){
+  in_this <- sp::point.in.polygon(
+    lonlat_grid[,1],
+    lonlat_grid[,2],
+    usa_poly$x[ (nai[j]+1):(nai[j+1]-1) ],
+    usa_poly$y[ (nai[j]+1):(nai[j+1]-1) ]
+  )
+  in_usa <- in_usa | in_this
+}
+# subset to the points in USA
+lonlat_usa <- as.matrix( lonlat_grid[ in_usa, ] )
+
+
+
+llt <- as.data.frame(lonlat_usa)
+reachablewlistsrall <- function(lonlat, x) {
+  # points within 2x miles
+  indice <- which(lonlat[1] == llt$Var1 & lonlat[2] == llt$Var2 )
+  less_than_2x <- c()
+  if(x == 75){
+    less_than_2x <- points_near_points75[[indice]]}
+  else{
+    less_than_2x <- points_near_points100[[indice]]}
+  #
+  nearby_ports1 <- airports_nearby(matrix(lonlat, nrow= 1), airport_data, x)
+
+  # take 1 flight within x miles and travel another x miles
+  if (x == 75){
+    nearby_ports1 <- closest_airport75[[indice]]}
+  else{
+    nearby_ports1 <- closest_airport100[[indice]]}
+
+  less_than_x <- c()
+  for (port in nearby_ports1) {
+    directflights <- sym_direct_from[[port]]
+    for (port2 in directflights) {
+      if(x ==75){
+        less_than_x <- c(less_than_x, points_near_airport75[[port2]])
+      }
+      if( x== 100){
+        less_than_x <- c(less_than_x, points_near_airport100[[port2]])
+      }
+    }}
+
+  all_points <- unique( c(less_than_x, less_than_2x) )
+  all_points2 <- all_points[!is.na(all_points)]
+  all_points2 <- all_points2[all_points2<=nrow(lonlat_usa)]
+  #return(lonlat_usa[all_points2,]) this statement would return solely the points
+  mapster <- as.data.frame(lonlat_usa[all_points2,])
+  prop <- nrow(mapster)/nrow(lonlat_usa)
+  return(list(mapview(mapster, xcol = "Var1", ycol = "Var2", crs = 4269, grid = FALSE),prop))}
+#the rall version of reachablewlists returns the map and the proportion
+
+lonlat <- lonlat_usa[6390,] #Gronton closest point to Ithaca
+reachablewlistsrall(lonlat, 75)
+```
+We created two reachable functions. The one above returns a list of both the map and the proportion. However later, we decided to just return the proportion, so then we could make a heat map for speed purposes. 
+
+
+```{r}
+
+#3. (75 distance)
+library("fields")
+llt <- as.data.frame(lonlat_usa)
+reachablewlists <- function(sym_direct_from, lonlat, x) {
+  # points within 2x miles
+  indice <- which(lonlat[1] == llt$Var1 & lonlat[2] == llt$Var2 )
+  less_than_2x <- c()
+  if(x == 75){
+    less_than_2x <- as.vector(points_near_points75[[indice]])}
+  else{
+    less_than_2x <- as.vector(points_near_points100[[indice]])}
+  nearby_ports1 <- airports_nearby(matrix(lonlat, nrow= 1), airport_data, x)
+
+  # take 1 flight within x miles and travel another x miles
+  if (x == 75){
+    nearby_ports1 <- closest_airport75[[indice]]}
+  else{
+    nearby_ports1 <- closest_airport100[[indice]]}
+
+  less_than_x <- c()
+  for (port in nearby_ports1) {
+    directflights <- sym_direct_from[[port]]
+    for (port2 in directflights) {
+      if(x ==75){
+        less_than_x <- c(less_than_x, points_near_airport75[[port2]])
+      }
+      if( x== 100){
+        less_than_x <- c(less_than_x, points_near_airport100[[port2]])}
+
+    }}
+  all_points <- unique( c(less_than_x, less_than_2x) )
+  all_points2 <- all_points[!is.na(all_points)]
+  all_points2 <- all_points2[all_points2<=nrow(lonlat_usa)]
+  mapster <- as.data.frame(lonlat_usa[all_points2,])
+  prop <- nrow(mapster)/nrow(lonlat_usa)
+  return(prop)}
+prop75 <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop75[i] <- reachablewlists(sym_direct_from, lonlat_usa[i,,drop=FALSE], 75)}
+mean(prop75) 
+
+airport_map2 <- as.data.frame(lonlat_usa)
+airport_map2['Prop75'] <- prop75
+
+names(airport_map2) <- c("Longitude", "Latitude", "Prop75")
+map75 <- mapview(airport_map2, xcol = "Longitude", ycol = "Latitude", zcol = "Prop75",
+                 crs = 4269, grid = FALSE)
+map75
+
+```
+Above, the average proportion is listed for the original network for 75 miles. 
+
+```{r}
+#3 (100 distance)
+
+prop100 <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop100[i] <- reachablewlists(sym_direct_from, lonlat_usa[i,,drop=FALSE], 100)}
+mean(prop100) #0.232087
+
+airport_map2['Prop100'] <- prop100
+names(airport_map2) <- c("Longitude", "Latitude", "Prop75", "Prop100")
+map100 <- mapview(airport_map2, xcol = "Longitude", ycol = "Latitude", zcol = "Prop100",
+                  crs = 4269, grid = FALSE)
+map100
+```
+Above, the average proportion is listed for the original network for 100 miles. 
+
+```{r}
+
+prop75a <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop75a[i] <- reachablewlists( direct_from_a ,lonlat_usa[i,,drop=FALSE], 75)}
+mean(prop75a)
+airport_map3 <- as.data.frame(lonlat_usa)
+airport_map3['Prop75a'] <- prop75a
+names(airport_map3) <- c("Longitude", "Latitude", "Prop75a")
+map75a <- mapview(airport_map3, xcol = "Longitude", ycol = "Latitude", zcol = "Prop75a",
+                 crs = 4269, grid = FALSE)
+map75a
+```
+Above, the average proportion is listed for our new network A for 75 miles. We created a function dfa that takes in a direct_from network. The within30 object indicates which airports are within 30 miles of each other, meaning they are close in proximity. For each airport pair (port1, port2) in within30, outbound direct flights for both airports are found and the variable both stores the ports which port1 and port2 both have flights to. Next, we cut out the duplicate connections from the port with smaller amount of direct flights, and add back connections to other randomly selected destinations excluding the original destinations from port1 and port2 to maintain constant number of connections. Returns new direct_from_a network. This improves the connectivity by approximately 8%. While 8% doesn't seem like a high amount, when you take into consideration how many points that adds ~ 736 points of extra connect-ability, we think it is a sufficient amount.  
+
+```{r}
+
+prop100a <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop100a[i] <- reachablewlists( direct_from_a ,lonlat_usa[i,,drop=FALSE], 100)}
+mean(prop100a)
+airport_map3['Prop100'] <- prop100a
+names(airport_map3) <- c("Longitude", "Latitude", "Prop75a", "Prop100a")
+map100a <- mapview(airport_map3, xcol = "Longitude", ycol = "Latitude", zcol = "Prop100a",
+                  crs = 4269, grid = FALSE)
+map100a
+```
+Above, the average proportion is listed for our new network A for 100 miles. This improves the connectivity by approximately 6%. Again, while 6% doesn't seem like a high amount, when you take into consideration how many points that adds ~ 552 points of extra connect-ability, we think it is a sufficient amount.   
+
+```{r}
+
+prop75b <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop75b[i] <- reachablewlists( direct_from_b ,lonlat_usa[i,,drop=FALSE], 75)}
+mean(prop75b)
+airport_map4 <- as.data.frame(lonlat_usa)
+airport_map4['Prop75b'] <- prop75b
+names(airport_map4) <- c("Longitude", "Latitude", "Prop75b")
+map75b <- mapview(airport_map4, xcol = "Longitude", ycol = "Latitude", zcol = "Prop75b", crs = 4269, grid = FALSE)
+map75b
+```
+Above, the average proportion is listed for our new network B for 75 miles. Similiarly to a, we created a function dfb. This function swaps pairs of connections to maintain in degree and out degree of flights per airport and total number of connections. One of the pairs used is from duplicate flight routes from within30. Each duplicate connection in within30 is swapped with a random connection. Returns new direct_from_b network. This method has previously improved the connectivity  up to .2%; however, in this random iteration in R it did not have that effect. This improves the connectivity by approximately .05%. Truthfully, this percentage is not as high as we would have liked. Given the constraints, we believe our theory and implementation were on the right track and should have increased the proportion more. We do have a random variability in our list, so each time the function is run, a different network is made within the constraints. Depending on the random selection, the proportion can vary by 1% more.  
+
+
+```{r}
+
+prop100b <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop100b[i] <- reachablewlists( direct_from_b ,lonlat_usa[i,,drop=FALSE], 100)}
+mean(prop100b)
+airport_map4['Prop100b'] <- prop100b
+names(airport_map4) <- c("Longitude", "Latitude", "Prop75b", "Prop100b")
+map100b <- mapview(airport_map4, xcol = "Longitude", ycol = "Latitude", zcol = "Prop100b",
+                  crs = 4269, grid = FALSE)
+map100b
+
+```
+Above, the average proportion is listed for our new network B for 100 miles. This improves the connectivity by approximately .007%. Again, this percentage is not as high as we would have liked. We believed our method was right for increasing it, but unfortunately, our new list does not increase reachable proportion by a large amount with the constraints.
+
+```{r}
+
+prop75c <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop75c[i] <- reachablewlists( direct_from_c ,lonlat_usa[i,,drop=FALSE], 75)}
+mean(prop75c)
+airport_map5 <- as.data.frame(lonlat_usa)
+airport_map5['Prop75c'] <- prop75c
+names(airport_map5) <- c("Longitude", "Latitude", "Prop75c")
+map75c <- mapview(airport_map5, xcol = "Longitude", ycol = "Latitude", zcol = "Prop75c",
+                 crs = 4269, grid = FALSE)
+map75c
+```
+Above, the average proportion is listed for our new network C for 75 miles. We took the same approach for c, creating a function dfc. Dfc cuts out the duplicate connections from within30 and adds back connections to other randomly selected destinations excluding the original destinations from port1 and port2. Also keeps track of how many times ports had connections modified. Each airport can only be modified up to 2 times, otherwise loop skips that port, returning a new direct_from_c network. We saw this list similar to A but with more constrictions, so we didn't think we would be able to have it be better than A. With that said, the logic in our code is there for how we tackled it. We were able to write code for what we thought would improve it; however, our logic did not garner the results we wanted.
+
+
+```{r}
+
+prop100c <- c()
+for( i in 1:nrow(lonlat_usa)){
+  prop100c[i] <- reachablewlists( direct_from_c ,lonlat_usa[i,,drop=FALSE], 100)}
+mean(prop100c)
+airport_map5['Prop100c'] <- prop100c
+names(airport_map5) <- c("Longitude", "Latitude", "Prop75c", "Prop100c")
+map100c <- mapview(airport_map5, xcol = "Longitude", ycol = "Latitude", zcol = "Prop100c",
+                  crs = 4269, grid = FALSE)
+map100c
+
+```
+Above, the average proportion is listed for our new network C for 100 miles. This sometimes improves the connectivity up to .08%; however, in this random iteration it did not as seen in the smaller reachable value. 

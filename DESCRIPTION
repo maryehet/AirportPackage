@@ -1,0 +1,28 @@
+Package: AirportPackage
+Type: Package
+Title: Analysis of Airport Data for R
+Version: 0.1.0
+Authors@R: person("Amanda", "Langston", email = "amandamichellelangston@gmail.com",
+          role = c("aut", "cre")); person("Mary", "Eng", email = "maryeng127@gmail.com",
+          role = c("aut", "cre"))
+Maintainer: The package maintainer <yourself@somewhere.net>
+Description: This packages includes 3 functions (distfun, airports_nearby, 
+             check_symmetry), 2 lists (direct_from, and sym_direct from) and a 
+             data frame (airport_data).
+License: GPL-2
+Encoding: UTF-8
+LazyData: true
+Imports:
+  fields,
+  mapview,
+  maps,
+  base
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Depends: 
+    R (>= 2.10)
+Config/testthat/edition: 3
+RoxygenNote: 7.2.0
